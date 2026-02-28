@@ -5,7 +5,7 @@ import { useQueue } from '../hooks/useQueue';
 import QueueCard from '../components/queue/QueueCard';
 import AttendanceCard from '../components/queue/AttendanceCard';
 import EnterQueueModal from '../components/queue/EnterQueueModal';
-import type { Attendance } from '../models/Attendance';
+
 
 export default function QueuePage() {
   const [modalOpen, setModalOpen] = useState(false);
@@ -14,7 +14,8 @@ export default function QueuePage() {
     attendingEntries,
     enterQueue,
     startAttendance,
-    finishAttendance,
+    startNewAttendance,
+    finishSingleAttendance,
     leaveQueue,
     endShift,
   } = useQueue();
@@ -46,26 +47,34 @@ export default function QueuePage() {
   return (
     <div className="space-y-6 pb-4">
       {/* Active Attendances */}
-      {attendingEntries.length > 0 && (
+      {(activeAttendances ?? []).length > 0 && (
         <section>
           <h2 className="text-sm font-bold text-pink-600 uppercase tracking-wide mb-3">
             Atendendo agora
           </h2>
           <div className="space-y-3">
-            {attendingEntries.map((entry) => {
-              const att = (activeAttendances ?? []).find(
-                (a: Attendance) => a.queueEntryId === entry.id
+            {(() => {
+              const sorted = [...(activeAttendances ?? [])].sort(
+                (a, b) => new Date(a.startedAt).getTime() - new Date(b.startedAt).getTime()
               );
-              if (!att) return null;
-              return (
+              // Build attendance number per salesperson
+              const counterMap = new Map<number, number>();
+              const numberedAtts = sorted.map((att) => {
+                const count = (counterMap.get(att.salespersonId) ?? 0) + 1;
+                counterMap.set(att.salespersonId, count);
+                return { att, num: count };
+              });
+              return numberedAtts.map(({ att, num }) => (
                 <AttendanceCard
-                  key={entry.id}
+                  key={att.id}
                   attendance={att}
-                  name={nameMap.get(entry.salespersonId) ?? '?'}
-                  onFinish={() => finishAttendance(entry.id!)}
+                  name={nameMap.get(att.salespersonId) ?? '?'}
+                  attendanceNumber={num}
+                  onFinish={() => finishSingleAttendance(att.id!)}
+                  onNewAttendance={() => startNewAttendance(att.queueEntryId)}
                 />
-              );
-            })}
+              ));
+            })()}
           </div>
         </section>
       )}

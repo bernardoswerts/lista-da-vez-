@@ -66,34 +66,50 @@ export function useQueue() {
     });
   }
 
-  async function finishAttendance(queueEntryId: number) {
+  async function startNewAttendance(queueEntryId: number) {
     const entry = await db.queueEntries.get(queueEntryId);
-    if (!entry) return;
+    if (!entry || entry.status !== 'attending') return;
+
+    await db.attendances.add({
+      salespersonId: entry.salespersonId,
+      queueEntryId: entry.id!,
+      startedAt: new Date(),
+      date: shiftDate,
+    });
+  }
+
+  async function finishSingleAttendance(attendanceId: number) {
+    const attendance = await db.attendances.get(attendanceId);
+    if (!attendance || attendance.finishedAt) return;
 
     const now = new Date();
-    const attendance = await db.attendances
-      .where({ queueEntryId })
-      .filter((a) => !a.finishedAt)
-      .first();
+    const durationMs = now.getTime() - new Date(attendance.startedAt).getTime();
+    await db.attendances.update(attendanceId, {
+      finishedAt: now,
+      durationMs,
+    });
 
-    if (attendance) {
-      const durationMs = now.getTime() - new Date(attendance.startedAt).getTime();
-      await db.attendances.update(attendance.id!, {
-        finishedAt: now,
-        durationMs,
+    // Check if there are remaining active attendances for this queueEntry
+    const remaining = await db.attendances
+      .where({ queueEntryId: attendance.queueEntryId })
+      .filter((a) => !a.finishedAt)
+      .count();
+
+    if (remaining === 0) {
+      const entry = await db.queueEntries.get(attendance.queueEntryId);
+      if (!entry) return;
+
+      // Mark current entry as left and re-enqueue
+      await db.queueEntries.update(attendance.queueEntryId, { status: 'left' });
+      const position = await getNextPosition();
+      await db.queueEntries.add({
+        salespersonId: entry.salespersonId,
+        position,
+        status: 'waiting',
+        enteredAt: new Date(),
+        shiftDate,
       });
     }
-
-    // Mark current entry as left and create new entry at end of queue
-    await db.queueEntries.update(queueEntryId, { status: 'left' });
-    const position = await getNextPosition();
-    await db.queueEntries.add({
-      salespersonId: entry.salespersonId,
-      position,
-      status: 'waiting',
-      enteredAt: new Date(),
-      shiftDate,
-    });
   }
 
   async function leaveQueue(queueEntryId: number) {
@@ -108,11 +124,11 @@ export function useQueue() {
 
     const now = new Date();
     for (const entry of attending) {
-      const attendance = await db.attendances
+      const openAttendances = await db.attendances
         .where({ queueEntryId: entry.id! })
         .filter((a) => !a.finishedAt)
-        .first();
-      if (attendance) {
+        .toArray();
+      for (const attendance of openAttendances) {
         const durationMs = now.getTime() - new Date(attendance.startedAt).getTime();
         await db.attendances.update(attendance.id!, {
           finishedAt: now,
@@ -138,7 +154,8 @@ export function useQueue() {
     allTodayEntries: allTodayEntries ?? [],
     enterQueue,
     startAttendance,
-    finishAttendance,
+    startNewAttendance,
+    finishSingleAttendance,
     leaveQueue,
     endShift,
   };
