@@ -1,7 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/database';
 import { todayStr } from '../utils/dateUtils';
-import type { QueueEntry } from '../models/QueueEntry';
 
 export function useQueue() {
   const shiftDate = todayStr();

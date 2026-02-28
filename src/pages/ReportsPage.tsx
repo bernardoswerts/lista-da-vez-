@@ -81,7 +81,7 @@ export default function ReportsPage() {
                   <XAxis type="number" allowDecimals={false} />
                   <YAxis type="category" dataKey="name" width={80} tick={{ fontSize: 13 }} />
                   <Tooltip
-                    formatter={(value: number) => [value, 'Atendimentos']}
+                    formatter={(value) => [String(value), 'Atendimentos']}
                   />
                   <Bar dataKey="count" radius={[0, 6, 6, 0]} barSize={28}>
                     {stats.individual.map((_, i) => (
